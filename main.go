@@ -29,6 +29,9 @@ var (
 	multipleAccountIds    = flag.String("multiple-acc-ids", "", "List of comma-separated account ids to monitor")
 	orgAccountId          = flag.String("org-acc-id", "", "Account id of parent organization account")
 	rolePrefix            = flag.String("role-prefix", "deepfence-cloud-scanner", "Prefix for role to be assumed in monitored accounts")
+	roleName              = flag.String("role-name", "SecurityAuditExtended", "Name for role to be assumed in monitored accounts")
+	awsAccessKeyID        = flag.String("aws-access-key-id", "", "AWS Access Key ID to for the service account to assume the RoleName in the monitored accounts")
+	awsSecretAccessKey    = flag.String("aws-secret-access-key", "", "AWS Secret Access Key to for the service account to assume the RoleName in the monitored accounts")
 	successSignalUrl      = flag.String("success-signal-url", "", "URL to send notification for successful deployment of ECS Task")
 	cloudAuditLogIDs      = flag.String("cloud-audit-log-ids", "", "Comma separated IDs of CloudTrail/Azure Monitor Logs/Cloud Audit Logs to enable refreshing cloud resources every hour")
 	commaSplitRegex       = regexp.MustCompile(`\s*,\s*`)
@@ -90,6 +93,18 @@ func main() {
 		*rolePrefix = os.Getenv("ROLE_PREFIX")
 	}
 
+	if *roleName == "" {
+		*roleName = os.Getenv("ROLE_NAME")
+	}
+
+	if *awsAccessKeyID == "" {
+		*awsAccessKeyID = os.Getenv("AWS_ACCESS_KEY_ID")
+	}
+
+	if *awsSecretAccessKey == "" {
+		*awsSecretAccessKey = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	}
+
 	if !*httpServerRequired {
 		temp := os.Getenv("HTTP_SERVER_REQUIRED")
 		if temp == "true" {
@@ -115,6 +130,9 @@ func main() {
 		DeepfenceKey:          *deepfenceKey,
 		HttpServerRequired:    *httpServerRequired,
 		RolePrefix:            *rolePrefix,
+		RoleName:              *roleName,
+		AwsAccessKeyId:        *awsAccessKeyID,
+		AwsSecretAccessKey:    *awsSecretAccessKey,
 		CloudAuditLogsIDs:     cloudAuditLogsIDs,
 		InactiveThreshold:     *inactiveThreshold,
 		Version:               Version,
