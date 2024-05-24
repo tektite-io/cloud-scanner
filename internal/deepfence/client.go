@@ -8,23 +8,26 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/deepfence/ThreatMapper/deepfence_utils/controls"
-	"github.com/rs/zerolog/log"
 
 	"github.com/deepfence/cloud-scanner/util"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/deepfence/golang_deepfence_sdk/client"
 	oahttp "github.com/deepfence/golang_deepfence_sdk/utils/http"
 )
 
 var (
-	HomeDirectory string
+	CloudScannerVersion string
+	HomeDirectory       string
 )
 
 func init() {
+	CloudScannerVersion = os.Getenv("VERSION")
 	HomeDirectory = os.Getenv("HOME_DIR")
 	if HomeDirectory == "" {
 		HomeDirectory = "/home/deepfence"
@@ -50,7 +53,7 @@ type AccessDeniedResponseError struct {
 }
 
 func NewClient(config util.Config) (*Client, error) {
-	log.Debug().Msgf("Building http client")
+	logrus.Debug("Building http client")
 	client := oahttp.NewHttpsConsoleClient(config.ManagementConsoleUrl, config.ManagementConsolePort)
 	err := client.APITokenAuthenticate(config.DeepfenceKey)
 	if err != nil {
@@ -63,7 +66,7 @@ func convertSliceType[T any, Y any](input []T) ([]Y, error) {
 	var res []Y
 	docBytes, err := json.Marshal(input)
 	if err != nil {
-		log.Error().Msgf(err.Error())
+		logrus.Error(err)
 		return res, err
 	}
 	json.Unmarshal(docBytes, &res)
@@ -74,7 +77,7 @@ func convertType[T any, Y any](input T) (Y, error) {
 	var res Y
 	docBytes, err := json.Marshal(input)
 	if err != nil {
-		log.Error().Msgf(err.Error())
+		logrus.Error(err)
 		return res, err
 	}
 	json.Unmarshal(docBytes, &res)
@@ -82,7 +85,7 @@ func convertType[T any, Y any](input T) (Y, error) {
 }
 
 func (c *Client) IngestComplianceResults(complianceDocs []util.ComplianceDoc) error {
-	log.Debug().Msgf("Number of docs to ingest: %d", len(complianceDocs))
+	logrus.Debugf("Number of docs to ingest: %d", len(complianceDocs))
 	chunkSize := 200
 	req := c.client.Client().CloudScannerAPI.IngestCloudCompliances(context.Background())
 	for i := 0; i < len(complianceDocs); i += chunkSize {
@@ -142,62 +145,83 @@ func (c *Client) SendScanStatusToConsole(ccstatus CloudComplianceScanStatus) err
 	return err
 }
 
-func (c *Client) RegisterCloudAccount(hostId, cloudProvider, cloudMetaId string,
-	multiIds []string, orgId *string, version string) error {
+func (c *Client) RegisterCloudAccount(cloud_provider,
+	cloud_metaid string, multi_ids []string, orgId *string,
+	pendingScans util.PendingScanMap) (util.PendingScanMap,
+	bool, []util.CloudTrailDetails, map[string]bool, error) {
 
-	nodeId := util.GetNodeId(cloudProvider, cloudMetaId)
+	nodeId := util.GetNodeId(cloud_provider, cloud_metaid)
 
 	req := c.client.Client().CloudNodesAPI.RegisterCloudNodeAccount(context.Background())
-	if len(multiIds) > 0 {
+	if len(multi_ids) > 0 {
 		monAccounts := map[string]string{}
-		for _, accId := range multiIds {
-			monAccounts[accId] = util.GetNodeId(cloudProvider, accId)
+		for _, accId := range multi_ids {
+			monAccounts[accId] = util.GetNodeId(cloud_provider, accId)
 		}
 
 		req = req.ModelCloudNodeAccountRegisterReq(
 			client.ModelCloudNodeAccountRegisterReq{
-				CloudAccount:        cloudMetaId,
-				CloudProvider:       cloudProvider,
+				CloudAccount:        cloud_metaid,
+				CloudProvider:       cloud_provider,
 				MonitoredAccountIds: monAccounts,
 				NodeId:              nodeId,
-				HostNodeId:          &hostId,
 				OrgAccId:            orgId,
-				Version:             &version,
+				Version:             &CloudScannerVersion,
 			},
 		)
 	} else {
 		req = req.ModelCloudNodeAccountRegisterReq(
 			client.ModelCloudNodeAccountRegisterReq{
-				CloudAccount:  cloudMetaId,
-				CloudProvider: cloudProvider,
+				CloudAccount:  cloud_metaid,
+				CloudProvider: cloud_provider,
 				NodeId:        nodeId,
-				HostNodeId:    &hostId,
-				Version:       &version,
+				Version:       &CloudScannerVersion,
 			},
 		)
 	}
 
-	log.Info().Msgf("Before CloudNodesAPI.RegisterCloudNodeAccountExecute")
 	out, _, err := c.client.Client().CloudNodesAPI.RegisterCloudNodeAccountExecute(req)
 	if err != nil {
-		log.Error().Msgf("Request errored on registering on management console: %s", err.Error())
-		return err
+		logrus.Debugf("Request errored on registering on management console: %s", err.Error())
+		return pendingScans, false, nil, nil, err
+	}
+
+	scansResponse, err := convertType[client.ModelCloudNodeAccountRegisterResp, util.ScansResponse](*out)
+	if err != nil {
+		logrus.Debug("convert type failed for scanDetails")
+		return pendingScans, false, nil, nil, err
+	}
+	logrus.Debugf("Adding scans data to pending scans: %+v", scansResponse.Data.Scans)
+
+	stopScansMap := make(map[string]bool)
+	for scanId, scanDetails := range scansResponse.Data.Scans {
+		logrus.Debugf("Checking if pending scan for scan id: %s", scanId)
+
+		if scanDetails.StopRequested == true {
+			stopScansMap[scanId] = true
+			continue
+		}
+
+		if _, ok := pendingScans[scanId]; !ok {
+			logrus.Debugf("Adding pending scan for scan id as not present earlier: %s", scanId)
+			pendingScans[scanId] = scanDetails
+		}
 	}
 
 	if out.GetData().LogAction.Id != 0 && out.GetData().LogAction.RequestPayload != "" {
 		var r controls.SendAgentDiagnosticLogsRequest
 		err = json.Unmarshal([]byte(out.GetData().LogAction.RequestPayload), &r)
 		if err != nil {
-			log.Error().Msgf("Error in unmarshalling log action payload: %+v", err)
+			logrus.Error("Error in unmarshalling log action payload", err)
 		} else {
 			err = c.sendDiagnosticLogs(r, []string{HomeDirectory + "/.steampipe/logs"}, []string{})
 			if err != nil {
-				log.Error().Msgf("Error in sending diagnostic logs: %+v", err)
+				logrus.Error("Error in sending diagnostic logs", err)
 			}
 		}
 	}
-	log.Info().Msgf("RegisterCloudAccount complete")
-	return nil
+	doRefresh, err := strconv.ParseBool(scansResponse.Data.Refresh)
+	return pendingScans, doRefresh, scansResponse.Data.CloudTrails, stopScansMap, nil
 }
 
 func (c *Client) RegisterCloudResources(resources []map[string]interface{}) error {
@@ -205,26 +229,25 @@ func (c *Client) RegisterCloudResources(resources []map[string]interface{}) erro
 	req := c.client.Client().CloudResourcesAPI.IngestCloudResources(context.Background())
 	b, err := json.Marshal(resources)
 	if err != nil {
-		log.Error().Msgf("Marshal error: %v", err)
+		logrus.Errorf("Marshal error: %v", err)
 	}
 	err = json.Unmarshal(b, &out)
 	if err != nil {
-		log.Error().Msgf("UnMarshal error: %v", err)
+		logrus.Errorf("UnMarshal error: %v", err)
 	}
 	req = req.IngestersCloudResource(out)
 	_, err = c.client.Client().CloudResourcesAPI.IngestCloudResourcesExecute(req)
 	if err != nil {
 		return err
 	}
-	log.Debug().Msgf("Resources ingested: %d", len(out))
+	logrus.Debugf("Resources ingested: %d", len(out))
 	return nil
 }
 
 func SendSuccessfulDeploymentSignal(successSignalUrl string) {
 	httpClient, err := buildHttpClient()
 	if err != nil {
-		log.Error().Msgf("Unable to build http client for sending success signal for deployment: %s",
-			err.Error())
+		logrus.Error("Unable to build http client for sending success signal for deployment: ", err.Error())
 	}
 	retryCount := 0
 	statusCode := 0
@@ -237,53 +260,51 @@ func SendSuccessfulDeploymentSignal(successSignalUrl string) {
 	}
 	docBytes, err := json.Marshal(waitSignal)
 	if err != nil {
-		log.Error().Msgf("Unable to parse deployment success signal: %s", err.Error())
+		logrus.Error("Unable to parse deployment success signal: ", err.Error())
 	}
 	postReader := bytes.NewReader(docBytes)
 
 	for {
 		httpReq, err := http.NewRequest("PUT", successSignalUrl, postReader)
 		if err != nil {
-			log.Error().Msgf("Unable to http request for deployment success signal: %s", err.Error())
+			logrus.Error("Unable to http request for deployment success signal: ", err.Error())
 		}
 		httpReq.Close = true
 		httpReq.Header.Set("Content-Type", "application/json")
 		resp, err := httpClient.Do(httpReq)
 		if err != nil {
-			log.Error().Msgf("Call for deployment success signal failed: %s", err.Error())
+			logrus.Error("Call for deployment success signal failed: ", err.Error())
 		}
 		statusCode = resp.StatusCode
 		if statusCode == 200 {
 			response, err = ioutil.ReadAll(resp.Body)
 			if err != nil {
-				log.Error().Msgf("Deployment success signal response cannot be parsed: %s", err.Error())
+				logrus.Error("Deployment success signal response cannot be parsed: ", err.Error())
 			}
 			resp.Body.Close()
 			break
 		} else if statusCode == 403 {
 			response, err = ioutil.ReadAll(resp.Body)
 			if err != nil {
-				log.Error().Msgf("Deployment success signal response for 403 cannot be parsed: %s",
-					err.Error())
+				logrus.Error("Deployment success signal response for 403 cannot be parsed: ", err.Error())
 			}
 			resp.Body.Close()
 			var errorResponse AccessDeniedResponseError
 			err = xml.Unmarshal(response, &errorResponse)
 			if err != nil {
-				log.Error().Msgf("Deployment 403 access denied response XML cannot be parsed: %s", err.Error())
+				logrus.Error("Deployment 403 access denied response XML cannot be parsed: ", err.Error())
 			}
 			if errorResponse.Code == "AccessDenied" && errorResponse.Message == "Request has expired" {
-				log.Info().Msgf("Expired Deployment success signal request: ")
+				logrus.Info("Expired Deployment success signal request: ")
 				break
 			}
 		} else {
 			if retryCount > 10 {
 				response, err = ioutil.ReadAll(resp.Body)
 				if err != nil {
-					log.Error().Msgf(err.Error())
+					logrus.Error(err)
 				}
-				log.Error().Msgf("Unsuccessful deployment success signal response. Got %d - %s",
-					resp.StatusCode, response)
+				logrus.Errorf("Unsuccessful deployment success signal response. Got %d - %s", resp.StatusCode, response)
 				resp.Body.Close()
 				break
 			}

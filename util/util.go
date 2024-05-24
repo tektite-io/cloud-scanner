@@ -9,7 +9,7 @@ import (
 	"time"
 
 	cloud_metadata "github.com/deepfence/cloud-scanner/cloud-metadata"
-	"github.com/rs/zerolog/log"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -93,26 +93,26 @@ func InSlice[T comparable](e T, s []T) bool {
 }
 
 func RestartSteampipeService() {
-	log.Info().Msgf("Restarting steampipe service")
+	logrus.Info("Restarting steampipe service")
 	stdOut, stdErr := exec.Command("bash", "-c", "steampipe service stop --force").CombinedOutput()
 	if stdErr != nil {
-		log.Error().Msgf(string(stdOut))
-		log.Error().Msgf(stdErr.Error())
+		logrus.Error(string(stdOut))
+		logrus.Error(stdErr.Error())
 	}
 	time.Sleep(5 * time.Second)
 
 	stdOut, stdErr = exec.Command("bash", "-c", "rm -f /tmp/.s.PGSQL.9193.lock").CombinedOutput()
 	if stdErr != nil {
-		log.Error().Msgf(string(stdOut))
-		log.Error().Msgf(stdErr.Error())
+		logrus.Error(string(stdOut))
+		logrus.Error(stdErr.Error())
 	}
 	time.Sleep(5 * time.Second)
 
 	stdOut, stdErr = exec.Command("bash", "-c", "steampipe service start").CombinedOutput()
 	if stdErr != nil {
-		log.Error().Msgf(string(stdOut))
-		log.Error().Msgf(stdErr.Error())
+		logrus.Error(string(stdOut))
+		logrus.Error(stdErr.Error())
 	}
-	log.Info().Msgf("Steampipe service restarted")
+	logrus.Info("Steampipe service restarted")
 	time.Sleep(5 * time.Second)
 }

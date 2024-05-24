@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	"github.com/sirupsen/logrus"
 )
 
 func buildHttpClient() (*http.Client, error) {
@@ -47,7 +47,7 @@ func ToKafkaRestFormat(data []interface{}) *bytes.Buffer {
 	for i, d := range data {
 		encoded, err := json.Marshal(&d)
 		if err != nil {
-			log.Error().Msgf("failed to encode doc: %s", err)
+			logrus.Errorf("failed to encode doc: %s", err)
 			continue
 		}
 		values[i] = "{\"value\":" + string(encoded) + "}"

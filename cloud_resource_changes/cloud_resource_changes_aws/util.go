@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/deepfence/cloud-scanner/util"
-	"github.com/rs/zerolog/log"
+	"github.com/sirupsen/logrus"
 )
 
 func GetSupportedAwsRegions() []string {
@@ -35,13 +35,12 @@ func getCloudTrailTrails(config util.Config) []CloudTrailTrail {
 	stdOut, stdErr := cmd.CombinedOutput()
 	var trailList []CloudTrailTrail
 	if stdErr != nil {
-		log.Error().Msgf("Error while obtaining cloudtrail details: %v", stdErr)
-		log.Error().Msgf(string(stdOut))
+		logrus.Errorf("Error while obtaining cloudtrail details: %v", stdErr)
+		logrus.Error(string(stdOut))
 		return trailList
 	}
 	if err := json.Unmarshal(stdOut, &trailList); err != nil {
-		log.Error().Msgf("Error unmarshaling cloudtrail details: %v \n Steampipe Output: %s",
-			err, string(stdOut))
+		logrus.Errorf("Error unmarshaling cloudtrail details: %v \n Steampipe Output: %s", err, string(stdOut))
 		return trailList
 	}
 
@@ -114,7 +113,7 @@ func getCloudTrailTrails(config util.Config) []CloudTrailTrail {
 		}
 	}
 	if len(selectedTrailList) == 0 {
-		log.Error().Msgf("Cloudtrail not configured")
+		logrus.Error("Cloudtrail not configured")
 		return trailList
 	}
 	return []CloudTrailTrail{selectedTrailList[0]}

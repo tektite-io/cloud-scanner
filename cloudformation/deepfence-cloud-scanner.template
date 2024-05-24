@@ -293,12 +293,6 @@ Resources:
         Environment:
         - Name: TASK_ROLE
           Value: !Ref TaskIAMRole
-        - Name: MGMT_CONSOLE_URL 
-          Value: !Ref ManagementConsoleURL
-        - Name: MGMT_CONSOLE_PORT
-          Value: !Ref ManagementConsolePort
-        - Name: DEEPFENCE_KEY
-          Value: !Ref DeepfenceKey
         LogConfiguration:
           LogDriver: awslogs
           Options:

@@ -3,12 +3,6 @@ Deepfence Cloud Scanner runs in your cloud environment, gathering inventory and 
 
 Deploy Deepfence Cloud Scanner using the appropriate Terraform module for the cloud you wish to monitor.
 
-## Deploying Cloud Scanner
-
-- Cloud scanner is deployed in ECS Fargate / GCP Cloud Run / Azure Container Instance
-- Deployment is done using AWS CloudFormation template or terraform
-- Documentation: https://docs.deepfence.io/threatmapper/docs/cloudscanner/
-
 ## Build
 
 ```shell
@@ -42,7 +36,7 @@ docker run -it --rm \
   -v $(pwd):/tmp/output \
   -e CLOUD_ACCOUNT_ID=$AWS_ACCOUNT_ID \
   -e CLOUD_PROVIDER=aws \
-  quay.io/deepfenceio/cloud-scanner:latest \
+  deepfenceio/cloud-scanner:latest \
   --mode cli \
   --benchmark $BENCHMARK \
   --file "/tmp/output/$OUTPUT_FILE"
@@ -67,7 +61,7 @@ docker run -it --rm \
   -e CLOUD_ACCOUNT_ID=$GCLOUD_ACCOUNT_ID \
   -e CLOUDSDK_CORE_PROJECT=$GCLOUD_ACCOUNT_ID \
   -e CLOUD_PROVIDER=gcp \
-  quay.io/deepfenceio/cloud-scanner:latest \
+  deepfenceio/cloud-scanner:latest \
   --mode cli \
   --benchmark $BENCHMARK \
   --file "/tmp/output/$OUTPUT_FILE"
@@ -98,7 +92,7 @@ docker run -it --rm \
   -e AZURE_SUBSCRIPTION_ID=$AZURE_ACCOUNT_ID \
   -e AZURE_TENANT_ID=$AZURE_TENANT_ID \
   -e CLOUD_PROVIDER=azure \
-  quay.io/deepfenceio/cloud-scanner:latest \
+  deepfenceio/cloud-scanner:latest \
   --mode cli \
   --benchmark $BENCHMARK \
   --file "/tmp/output/$OUTPUT_FILE"

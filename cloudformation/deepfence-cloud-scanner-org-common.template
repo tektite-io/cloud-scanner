@@ -379,7 +379,7 @@ Resources:
     DependsOn: CloudScannerDeployment
     Properties:
       Handle: !Ref CloudScannerDeploymentComplete
-      Timeout: '600'
+      Timeout: '300'
   CloudScannerRole:
     Type: 'AWS::CloudFormation::StackSet'
     DependsOn: CloudScannerDeploymentCompleteWait

@@ -3,16 +3,14 @@ ARG IMAGE_REPOSITORY=deepfenceio
 FROM $IMAGE_REPOSITORY/steampipe:$DF_IMG_TAG AS steampipe
 
 FROM golang:1.21-bookworm AS build
-ARG VERSION=latest
 
 WORKDIR /home/deepfence/src/cloud_scanner
 COPY . .
 WORKDIR /home/deepfence/src/cloud_scanner
-RUN go build -ldflags="-s -w -X main.Version=${VERSION}" -o cloud_scanner .
+RUN go build -o cloud_scanner .
+
 
 FROM debian:bookworm-slim
-ARG VERSION
-
 MAINTAINER Deepfence Inc
 LABEL deepfence.role=system
 
@@ -49,8 +47,8 @@ RUN steampipe service start \
     && git clone https://github.com/turbot/steampipe-mod-azure-compliance.git --branch v0.35 --depth 1 \
     && steampipe service stop
 
-
-ENV PUBLISH_CLOUD_RESOURCES_INTERVAL_MINUTES=5 \
+ENV VERSION=2.2.0 \
+    PUBLISH_CLOUD_RESOURCES_INTERVAL_MINUTES=5 \
     FETCH_CLOUD_RESOURCES_INTERVAL_HOURS=12
 
 EXPOSE 8080

@@ -13,7 +13,7 @@ import (
 	"github.com/deepfence/cloud-scanner/internal/deepfence"
 	"github.com/deepfence/cloud-scanner/util"
 	_ "github.com/lib/pq"
-	"github.com/rs/zerolog/log"
+	"github.com/sirupsen/logrus"
 )
 
 type CloudResourceInfo struct {
@@ -74,9 +74,8 @@ func clearPostgresqlCache() error {
 func QueryAndRegisterResources(config util.Config, client *deepfence.Client) []error {
 	err := clearPostgresqlCache()
 	if err != nil {
-		log.Warn().Msgf("failed to clear postgresql cache: " + err.Error())
+		logrus.Warn("failed to clear postgresql cache: " + err.Error())
 	}
-	log.Info().Msg("QueryAndRegisterResources after clearPostgresqlCache")
 	var accountsToScan []string
 	if len(config.MultipleAccountIds) > 0 {
 		accountsToScan = config.MultipleAccountIds
@@ -84,7 +83,7 @@ func QueryAndRegisterResources(config util.Config, client *deepfence.Client) []e
 	if !util.InSlice(config.CloudMetadata.ID, accountsToScan) {
 		accountsToScan = append(accountsToScan, config.CloudMetadata.ID)
 	}
-	log.Info().Msgf("Started querying resources for %s: %v", config.CloudProvider, accountsToScan)
+	logrus.Infof("Started querying resources for %s: %v", config.CloudProvider, accountsToScan)
 	count := 0
 	var errors = make([]error, 0)
 	for _, accountId := range accountsToScan {
@@ -99,7 +98,7 @@ func QueryAndRegisterResources(config util.Config, client *deepfence.Client) []e
 			}
 		}
 	}
-	log.Info().Msgf("Cloud resources ingested: %d", count)
+	logrus.Infof("Cloud resources ingested: %d", count)
 	return errors
 }
 
@@ -115,7 +114,7 @@ func clearPostgresqlCacheRows(keyPrefix string) error {
 }
 
 func QueryAndUpdateResources(config util.Config, client *deepfence.Client, cloudResourceTypesToRefresh map[string][]string) []error {
-	log.Info().Msgf("Started querying updated resources for %s", config.CloudProvider)
+	logrus.Infof("Started querying updated resources for %s", config.CloudProvider)
 	count := 0
 	var errors = make([]error, 0)
 	var err error
@@ -145,7 +144,7 @@ func QueryAndUpdateResources(config util.Config, client *deepfence.Client, cloud
 		}
 	}
 
-	log.Info().Msgf("Cloud resources ingested: %d", count)
+	logrus.Infof("Cloud resources ingested: %d", count)
 	return errors
 }
 
@@ -153,7 +152,7 @@ func queryResources(accountId string, cloudResourceInfo CloudResourceInfo, confi
 	var cloudResourceChunks = make([][]map[string]interface{}, 0)
 	var cloudResources = make([]map[string]interface{}, 0)
 
-	log.Debug().Msgf("Querying resources for %s", cloudResourceInfo.Table)
+	logrus.Debugf("Querying resources for %s", cloudResourceInfo.Table)
 	query := "steampipe query --output json \"select \\\"" + strings.Join(cloudResourceInfo.Columns[:], "\\\" , \\\"") + "\\\" from " + cloudResourceInfo.Table + " \""
 	if accountId != config.CloudMetadata.ID {
 		query = "steampipe query --output json \"select \\\"" + strings.Join(cloudResourceInfo.Columns[:], "\\\" , \\\"") + "\\\" from aws_" + accountId + "." + cloudResourceInfo.Table + " \""
@@ -167,8 +166,8 @@ func queryResources(accountId string, cloudResourceInfo CloudResourceInfo, confi
 	for i := 0; i <= 3; i++ {
 		stdOut, stdErr = exec.Command("bash", "-c", query).CombinedOutput()
 		if stdErr != nil {
-			log.Error().Msgf("Error at querying res: %v for query: %s", stdErr, query)
-			log.Error().Msgf(string(stdOut))
+			logrus.Errorf("Error at querying res: %v for query: %s", stdErr, query)
+			logrus.Error(string(stdOut))
 			if strings.Contains(string(stdOut), util.ErrSteampipeDB) || strings.Contains(string(stdOut), util.ErrSteampipeInvalidClientTokenID) {
 				util.RestartSteampipeService()
 			} else {
@@ -183,13 +182,13 @@ func queryResources(accountId string, cloudResourceInfo CloudResourceInfo, confi
 		return cloudResourceChunks
 	}
 
-	log.Trace().Msgf("Got stdout for %s: %s", cloudResourceInfo.Table, string(stdOut))
+	logrus.Tracef("Got stdout for %s: %s", cloudResourceInfo.Table, string(stdOut))
 	var objMap []map[string]interface{}
 	if err := json.Unmarshal(stdOut, &objMap); err != nil {
-		log.Error().Msgf("Error: %v \n Steampipe Output: %s", err, string(stdOut))
+		logrus.Errorf("Error: %v \n Steampipe Output: %s", err, string(stdOut))
 		return cloudResourceChunks
 	}
-	log.Debug().Msgf("Got length of %d for %s", len(objMap), cloudResourceInfo.Table)
+	logrus.Debugf("Got length of %d for %s", len(objMap), cloudResourceInfo.Table)
 
 	var private_dns_name string
 	for _, obj := range objMap {

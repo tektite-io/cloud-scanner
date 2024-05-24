@@ -57,7 +57,6 @@ type Config struct {
 	CloudProvider            string                       `json:"cloud_provider,omitempty"`
 	ScanId                   string                       `json:"scan_id,omitempty"`
 	NodeId                   string                       `json:"node_id,omitempty"`
-	HostId                   string                       `json:"host_id,omitempty"`
 	NodeName                 string                       `json:"node_name,omitempty"`
 	CloudMetadata            cloud_metadata.CloudMetadata `json:"cloud_metadata,omitempty"`
 	MultipleAccountIds       []string                     `json:"multiple_account_ids,omitempty"`
@@ -66,9 +65,7 @@ type Config struct {
 	RolePrefix               string                       `json:"role_prefix,omitempty"`
 	TableToRefresh           []string                     `json:"table_to_refresh,omitempty"`
 	CloudAuditLogsIDs        []string                     `json:"cloud_audit_logs_ids,omitempty"`
-	InactiveThreshold        int
 	HttpServerRequired       bool
-	Version                  string
 }
 
 type ComplianceDoc struct {

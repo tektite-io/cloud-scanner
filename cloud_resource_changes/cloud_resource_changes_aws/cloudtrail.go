@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/deepfence/cloud-scanner/util"
-	"github.com/rs/zerolog/log"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -42,7 +42,7 @@ type CloudResourceChangesAWS struct {
 
 func NewCloudResourcesChangesAWS(config util.Config) (*CloudResourceChangesAWS, error) {
 	if !IAMPermissionsSet {
-		log.Warn().Msg("Task role is not set to arn:aws:iam::aws:policy/ReadOnlyAccess. Disabling CloudTrail based updates of cloud resources.")
+		logrus.Warn("Task role is not set to arn:aws:iam::aws:policy/ReadOnlyAccess. Disabling CloudTrail based updates of cloud resources.")
 		return &CloudResourceChangesAWS{
 			config:           config,
 			cloudTrailTrails: []CloudTrailTrail{},
@@ -60,9 +60,9 @@ func (c *CloudResourceChangesAWS) Initialize() error {
 		return ErrNoCloudTrailsFound
 	}
 	c.cloudTrailTrails = trails
-	log.Info().Msgf("Following CloudTrail Trails are monitored for events every hour to update the cloud resources in the management console")
+	logrus.Info("Following CloudTrail Trails are monitored for events every hour to update the cloud resources in the management console")
 	for i, trail := range c.cloudTrailTrails {
-		log.Info().Msgf("%d. %s (Region: %s)", i+1, trail.Arn, trail.Region)
+		logrus.Infof("%d. %s (Region: %s)", i+1, trail.Arn, trail.Region)
 	}
 	return nil
 }
@@ -92,7 +92,7 @@ func (c *CloudResourceChangesAWS) GetResourceTypesToRefresh() (map[string][]stri
 		}
 	}
 
-	log.Info().Msgf("Resources types to update: %v", cloudResourcesToUpdate)
+	logrus.Infof("Resources types to update: %v", cloudResourcesToUpdate)
 	return cloudResourcesToUpdate, nil
 }
 
@@ -105,16 +105,15 @@ func (c *CloudResourceChangesAWS) getS3Region(s3BucketName, accountId string) st
 	stdOut, stdErr := cmd.CombinedOutput()
 	s3Region := "us-east-1"
 	if stdErr != nil {
-		log.Error().Msgf("Error while obtaining s3 bucket region for cloudtrail: %v", stdErr)
-		log.Error().Msgf(string(stdOut))
+		logrus.Errorf("Error while obtaining s3 bucket region for cloudtrail: %v", stdErr)
+		logrus.Error(string(stdOut))
 	}
 	var s3BucketObjMapList []S3Details
 	if err := json.Unmarshal(stdOut, &s3BucketObjMapList); err != nil {
-		log.Error().Msgf("Error unmarshaling s3 bucket region: %v \n Steampipe Output: %s",
-			err, string(stdOut))
+		logrus.Errorf("Error unmarshaling s3 bucket region: %v \n Steampipe Output: %s", err, string(stdOut))
 	}
 	if len(s3BucketObjMapList) == 0 {
-		log.Error().Msgf("Unable to get s3 bucket region, defaulting to us-east-1")
+		logrus.Errorf("Unable to get s3 bucket region, defaulting to us-east-1")
 	} else {
 		s3Region = s3BucketObjMapList[0].Region
 	}
@@ -127,13 +126,13 @@ func getOrgId(accountId string) string {
 	stdOut, stdErr := cmd.CombinedOutput()
 	orgId := ""
 	if stdErr != nil {
-		log.Error().Msgf("Error while obtaining org id for cloudtrail: %v", stdErr)
-		log.Error().Msgf(string(stdOut))
+		logrus.Errorf("Error while obtaining org id for cloudtrail: %v", stdErr)
+		logrus.Error(string(stdOut))
 		return orgId
 	}
 	var orgIdObjMapList []AccountDetails
 	if err := json.Unmarshal(stdOut, &orgIdObjMapList); err != nil {
-		log.Error().Msgf("Error unmarshaling org id: %v \n Steampipe Output: %s", err, string(stdOut))
+		logrus.Errorf("Error unmarshaling org id: %v \n Steampipe Output: %s", err, string(stdOut))
 		return orgId
 	}
 	if len(orgIdObjMapList) > 0 {
@@ -177,7 +176,7 @@ func (c *CloudResourceChangesAWS) getCloudTrailLogEventsFromS3Bucket(isOrganizat
 		})
 	}
 	if err != nil {
-		log.Error().Msgf("NewSession Error: %s", err.Error())
+		logrus.Error("NewSession Error", err)
 		return nil
 	}
 	svc := s3.New(sess)
@@ -227,7 +226,7 @@ func (c *CloudResourceChangesAWS) listAndProcessS3Objects(regionalFilePrefix str
 		return lastPage
 	})
 	if err != nil {
-		log.Error().Msgf("Error listing objects for region %s: %s", region, err.Error())
+		logrus.Errorf("Error listing objects for region %s: %s", region, err.Error())
 		if strings.Contains(err.Error(), "AccessDenied") {
 			return true
 		}
@@ -266,7 +265,7 @@ func (c *CloudResourceChangesAWS) getLastModifiedFromMap(region string, accId st
 func (c *CloudResourceChangesAWS) processCloudtrailEventLogFile(fileName string, key *s3.Object, sess *session.Session, s3Bucket, accId string, cloudResourcesToRefresh map[string]map[string]bool) {
 	file, err := os.Create("/tmp/" + fileName)
 	if err != nil {
-		log.Error().Msgf("Error creating file for S3 download %s: %s", *key.Key, err.Error())
+		logrus.Error("Error creating file for S3 download %s: %s", *key.Key, err.Error())
 	}
 	defer os.Remove("/tmp/" + fileName)
 	downloader := s3manager.NewDownloader(sess)
@@ -279,7 +278,7 @@ func (c *CloudResourceChangesAWS) processCloudtrailEventLogFile(fileName string,
 	}
 	_, err = downloader.Download(file, &s3ObjectInput)
 	if err != nil {
-		log.Error().Msgf("Unable to download item %q, %s", *key.Key, err.Error())
+		logrus.Errorf("Unable to download item %q, %s", *key.Key, err.Error())
 		return
 	}
 	reader, err := gzip.NewReader(file)
@@ -287,7 +286,7 @@ func (c *CloudResourceChangesAWS) processCloudtrailEventLogFile(fileName string,
 	var cloudTrailEvent CloudTrailLogFile
 	err = json.NewDecoder(reader).Decode(&cloudTrailEvent)
 	if err != nil {
-		log.Error().Msgf("Error converting s3 object to json: %s", err.Error())
+		logrus.Error("Error converting s3 object to json: ", err.Error())
 	}
 
 	for _, r := range cloudTrailEvent.Records {

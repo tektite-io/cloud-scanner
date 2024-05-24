@@ -4,18 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
+	"time"
 
+	"github.com/deepfence/ThreatMapper/deepfence_utils/utils"
 	"github.com/deepfence/cloud-scanner/internal/deepfence"
 	"github.com/deepfence/cloud-scanner/util"
-	"github.com/rs/zerolog/log"
-)
-
-var (
-	scanStatusFilename = os.Getenv("DF_INSTALL_DIR") + "/var/log/fenced/cloud-scanner-log/cloud_scanner_status.log"
-	scanFilename       = os.Getenv("DF_INSTALL_DIR") + "/var/log/fenced/cloud-scanner/cloud_scanner.log"
-	ScanFilename       = os.Getenv("DF_INSTALL_DIR") + "/var/log/fenced/cloud-scanner/cloud_scanner.log"
+	"github.com/olekukonko/tablewriter"
+	"github.com/sirupsen/logrus"
 )
 
 type Publisher struct {
@@ -24,10 +19,70 @@ type Publisher struct {
 	stopScanStatus chan bool
 }
 
+func NewPublisher(config util.Config) (*Publisher, error) {
+	dfClient, err := deepfence.NewClient(config)
+	if err != nil {
+		return nil, err
+	}
+	return &Publisher{
+		config:         config,
+		dfClient:       dfClient,
+		stopScanStatus: make(chan bool, 1),
+	}, nil
+}
+
 func NewCliPublisher(config util.Config) (*Publisher, error) {
 	return &Publisher{
 		config: config,
 	}, nil
+}
+
+func (p *Publisher) PublishScanStatusMessage(scanId string, scanTypes []string, message string, status string, extras map[string]interface{}) {
+
+	ccstatus := deepfence.CloudComplianceScanStatus{
+		ScanId:               scanId,
+		ScanMessage:          message,
+		ScanStatus:           status,
+		NodeId:               "",
+		ComplianceCheckTypes: scanTypes,
+		Result:               deepfence.IngestersComplianceStats{},
+		TotalChecks:          0,
+		Type:                 "",
+	}
+
+	utils.FromMap(extras, &ccstatus)
+
+	err := p.dfClient.SendScanStatusToConsole(ccstatus)
+	if err != nil {
+		logrus.Error(scanId, " ", err.Error())
+	}
+	logrus.Info(scanId + " " + status)
+}
+
+func (p *Publisher) PublishScanError(scanId string, scanType string, errMsg string) {
+	p.stopScanStatus <- true
+	time.Sleep(3 * time.Second)
+	//p.PublishScanStatusMessage(scanId, scanType, errMsg, "ERROR", nil)
+}
+
+// func (p *Publisher) PublishScanStatus(scanId string, scanType string, status string) {
+//	go func() {
+//		p.PublishScanStatusMessage(scanId, scanType, "", status, nil)
+//		ticker := time.NewTicker(2 * time.Minute)
+//		for {
+//			select {
+//			case <-ticker.C:
+//				p.PublishScanStatusMessage(scanId, scanType, "", status, nil)
+//			case <-p.stopScanStatus:
+//				return
+//			}
+//		}
+//	}()
+//}
+
+func (p *Publisher) StopPublishScanStatus() {
+	p.stopScanStatus <- true
+	time.Sleep(3 * time.Second)
 }
 
 func (p *Publisher) IngestComplianceResults(complianceDocs []util.ComplianceDoc) error {
@@ -44,49 +99,49 @@ func (p *Publisher) OutputSummary(complianceSummary util.ComplianceSummary) {
 	fmt.Printf("Error: %d\n", complianceSummary.Error)
 }
 
+func (p *Publisher) Output(complianceDocs []util.ComplianceDoc, complianceSummary util.ComplianceSummary) error {
+	var err error
+	if p.config.Output == util.TextOutput {
+		p.OutputSummary(complianceSummary)
+	} else if p.config.Output == util.JsonOutput {
+		var complianceCheck []byte
+		for _, complianceDoc := range complianceDocs {
+			complianceCheck, err = json.MarshalIndent(complianceDoc, "", "\t")
+			if err == nil {
+				fmt.Println(string(complianceCheck))
+			}
+		}
+	} else if p.config.Output == util.TableOutput {
+		p.OutputSummary(complianceSummary)
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{"Service", "Group", "Title", "Resource", "Status"})
+		table.SetHeaderLine(true)
+		table.SetBorder(true)
+		table.SetAutoWrapText(true)
+		table.SetAutoFormatHeaders(true)
+		table.SetColMinWidth(0, 10)
+		table.SetColMinWidth(1, 15)
+		table.SetColMinWidth(2, 15)
+		table.SetColMinWidth(3, 15)
+		table.SetColMinWidth(4, 50)
+		for _, complianceDoc := range complianceDocs {
+			table.Append([]string{
+				complianceDoc.Service,
+				complianceDoc.Group,
+				complianceDoc.Title,
+				complianceDoc.Status,
+				complianceDoc.Resource,
+			})
+		}
+		table.Render()
+	}
+	return nil
+}
+
 func (p *Publisher) WriteFile(filePath string, complianceDocs []util.ComplianceDoc) error {
 	jsonString, err := json.MarshalIndent(complianceDocs, "", "\t")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filePath, jsonString, os.ModePerm)
-}
-
-func WriteScanStatus(status, scanID, scanMessage string) {
-	var scanLogDoc = make(map[string]interface{})
-	scanLogDoc["scan_id"] = scanID
-	scanLogDoc["scan_status"] = status
-	scanLogDoc["scan_message"] = scanMessage
-
-	byteJSON, err := json.Marshal(scanLogDoc)
-	if err != nil {
-		log.Error().Msgf("Error marshalling json for status: %s", err)
-		return
-	}
-
-	log.Info().Msgf("Writing status: %s", status)
-	err = writeToFile(byteJSON, scanStatusFilename)
-	if err != nil {
-		log.Error().Msgf("Error writing status data to %s, Error: %s", scanStatusFilename, err)
-		return
-	}
-}
-
-func writeToFile(data []byte, fileName string) error {
-	jsonString := string(data)
-	if err := os.MkdirAll(filepath.Dir(fileName), 0755); err != nil {
-		return fmt.Errorf("os.MkdirAll: %w", err)
-	}
-
-	f, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		return fmt.Errorf("os.OpenFile:%s", err.Error())
-	}
-
-	defer f.Close()
-	jsonString = strings.ReplaceAll(jsonString, "\n", " ")
-	if _, err = f.WriteString(jsonString + "\n"); err != nil {
-		return err
-	}
-	return nil
 }

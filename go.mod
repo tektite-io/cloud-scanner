@@ -9,12 +9,13 @@ replace github.com/deepfence/golang_deepfence_sdk/utils => ./golang_deepfence_sd
 require (
 	github.com/Jeffail/tunny v0.1.4
 	github.com/aws/aws-sdk-go v1.50.19
-	github.com/deepfence/ThreatMapper/deepfence_utils v0.0.0-20240418094410-eadc88e3d9f5
+	github.com/deepfence/ThreatMapper/deepfence_utils v0.0.0-20240216152450-f7121e88e315
 	github.com/deepfence/golang_deepfence_sdk/client v0.0.0-00010101000000-000000000000
 	github.com/deepfence/golang_deepfence_sdk/utils v0.0.0-00010101000000-000000000000
 	github.com/google/uuid v1.5.0
 	github.com/lib/pq v1.10.9
-	github.com/rs/zerolog v1.31.0
+	github.com/olekukonko/tablewriter v0.0.5
+	github.com/sirupsen/logrus v1.9.3
 )
 
 require (
@@ -37,9 +38,11 @@ require (
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
+	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/pierrec/lz4/v4 v4.1.19 // indirect
 	github.com/redis/go-redis/v9 v9.4.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/rs/zerolog v1.31.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/twmb/franz-go v1.15.4 // indirect

@@ -1,29 +1,35 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
+	"fmt"
+	"io"
 	"os"
+	"path"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/deepfence/ThreatMapper/deepfence_utils/log"
 	"github.com/deepfence/cloud-scanner/internal/deepfence"
 
+	"github.com/deepfence/cloud-scanner/scanner"
 	"github.com/deepfence/cloud-scanner/service"
 	"github.com/deepfence/cloud-scanner/util"
+	"github.com/sirupsen/logrus"
 )
 
 var (
-	CloudScannerSocket    = "/tmp/cloud-scanner.sock"
+	mode                  = flag.String("mode", util.ModeCli, "cli or service")
 	output                = flag.String("output", util.TextOutput, "Output format: json, table or text")
 	benchmark             = flag.String("benchmark", "all", "Benchmarks: cis, gdpr, hipaa, pci, soc2, nist")
+	fileOutput            = flag.String("file", "", "File to write the output to")
 	quiet                 = flag.Bool("quiet", false, "Don't display any output in stdout")
-	socketPath            = flag.String("socket-path", CloudScannerSocket, "Path to socket")
 	managementConsoleUrl  = flag.String("mgmt-console-url", "", "Deepfence Management Console URL")
 	managementConsolePort = flag.Int("mgmt-console-port", 443, "Deepfence Management Console Port")
 	deepfenceKey          = flag.String("deepfence-key", "", "Deepfence key for auth")
+	complianceCheckTypes  = flag.String("compliance-check-types", "all", "Compliance check types separated by comma")
 	httpServerRequired    = flag.Bool("http-server-required", false, "HTTP Service required")
 	debug                 = flag.String("debug", "false", "set log level to debug")
 	multipleAccountIds    = flag.String("multiple-acc-ids", "", "List of comma-separated account ids to monitor")
@@ -32,114 +38,104 @@ var (
 	successSignalUrl      = flag.String("success-signal-url", "", "URL to send notification for successful deployment of ECS Task")
 	cloudAuditLogIDs      = flag.String("cloud-audit-log-ids", "", "Comma separated IDs of CloudTrail/Azure Monitor Logs/Cloud Audit Logs to enable refreshing cloud resources every hour")
 	commaSplitRegex       = regexp.MustCompile(`\s*,\s*`)
-	verbosity             = flag.String("verbose", "info", "log level")
-	inactiveThreshold     = flag.Int("inactive-threshold", 3600, "Threshold for Inactive scan in seconds")
 )
 
-var Version string
-
-func init() {
-	CloudScannerSocket = os.Getenv("DF_INSTALL_DIR") + CloudScannerSocket
-}
-
-func runServices(config util.Config, socketPath *string) {
-	s, err := json.MarshalIndent(config, "", "\t")
-	if err == nil {
-		log.Info().Msgf("Using config: %s", string(s))
-	}
-	svc, err := service.NewComplianceScanService(config, socketPath)
-	if err != nil {
-		log.Error().Msgf("Error: %v", err)
+func runOnce(config util.Config) {
+	if config.Output != util.TableOutput && config.Output != util.JsonOutput && config.Output != util.TextOutput {
+		logrus.Errorf("Error: output should be %s, %s or %s", util.JsonOutput, util.TableOutput, util.TextOutput)
 		return
 	}
-	log.Info().Msgf("Registering with Deepfence management console")
+	cloudComplianceScan, err := scanner.NewCloudComplianceScan(config)
+	if err != nil {
+		logrus.Errorf("Error: %v", err)
+		return
+	}
+	err = cloudComplianceScan.Scan()
+	if err != nil {
+		logrus.Errorf("Error: %v", err)
+		return
+	}
+}
+
+func runServices(config util.Config) {
+	svc, err := service.NewComplianceScanService(config)
+	if err != nil {
+		logrus.Errorf("Error: %v", err)
+		time.Sleep(1 * time.Minute)
+		return
+	}
+	logrus.Info("Registering with Deepfence management console")
 	err = svc.RunRegisterServices()
 	if err != nil {
-		log.Error().Msgf("Error: %v", err)
+		logrus.Errorf("Error: %v", err)
 	}
 }
 
 func main() {
-	log.Info().Msgf("Starting cloud scanner, version: %s", Version)
 	flag.Parse()
 
-	enableDebug := os.Getenv("DF_ENABLE_DEBUG") != ""
-	if enableDebug {
-		verbosity = debug
+	customFormatter := new(logrus.TextFormatter)
+	customFormatter.FullTimestamp = true
+	customFormatter.DisableLevelTruncation = true
+	customFormatter.PadLevelText = true
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.CallerPrettyfier = func(f *runtime.Frame) (string, string) {
+		return "", path.Base(f.File) + ":" + strconv.Itoa(f.Line)
 	}
-	log.Initialize(*verbosity)
 
-	if *successSignalUrl == "" {
-		*successSignalUrl = os.Getenv("SUCCESS_SIGNAL_URL")
+	logrus.SetReportCaller(true)
+	logrus.SetFormatter(customFormatter)
+	if *debug == "true" {
+		logrus.SetLevel(logrus.DebugLevel)
+	} else {
+		logrus.SetLevel(logrus.InfoLevel)
+	}
+	logFile, err := os.OpenFile(service.HomeDirectory+"/.steampipe/logs/cloud_scanner.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		fmt.Printf("error opening file: %v", err)
 	}
 
+	defer logFile.Close()
+	mw := io.MultiWriter(os.Stdout, logFile)
+	logrus.SetOutput(mw)
 	if *successSignalUrl != "" {
 		deepfence.SendSuccessfulDeploymentSignal(*successSignalUrl)
 	}
 
 	var cloudAuditLogsIDs []string
-	if *cloudAuditLogIDs == "" {
-		*cloudAuditLogIDs = os.Getenv("CLOUD_AUDIT_LOG_IDS")
-	}
-
 	if *cloudAuditLogIDs != "" {
 		cloudAuditLogsIDs = strings.Split(*cloudAuditLogIDs, ",")
 	}
-
-	if *rolePrefix == "" {
-		*rolePrefix = os.Getenv("ROLE_PREFIX")
-	}
-
-	if !*httpServerRequired {
-		temp := os.Getenv("HTTP_SERVER_REQUIRED")
-		if temp == "true" {
-			*httpServerRequired = true
-		}
-	}
-
-	inactiveThresholdStr := os.Getenv("INACTIVE_THRESHOLD")
-	if inactiveThresholdStr != "" {
-		i, err := strconv.Atoi(inactiveThresholdStr)
-		if err == nil {
-			*inactiveThreshold = i
-		} else {
-			log.Warn().Msgf("Invalid INACTIVE_THRESHOLD, defaulting to: %d", *inactiveThreshold)
-		}
-	}
-
 	config := util.Config{
+		Mode:                  *mode,
 		Output:                *output,
 		Quiet:                 *quiet,
 		ManagementConsoleUrl:  strings.TrimPrefix(*managementConsoleUrl, "https://"),
 		ManagementConsolePort: strconv.Itoa(*managementConsolePort),
 		DeepfenceKey:          *deepfenceKey,
+		ComplianceCheckTypes:  strings.Split(*complianceCheckTypes, ","),
 		HttpServerRequired:    *httpServerRequired,
 		RolePrefix:            *rolePrefix,
 		CloudAuditLogsIDs:     cloudAuditLogsIDs,
-		InactiveThreshold:     *inactiveThreshold,
-		Version:               Version,
 	}
-
-	log.Info().Msgf("Env variables are:\n%s", strings.Join(os.Environ(), ","))
-
-	if multipleAccountIds == nil || len(*multipleAccountIds) == 0 {
-		*multipleAccountIds = os.Getenv("DF_MULTIPLE_ACC_ID")
-		*orgAccountId = os.Getenv("DF_ORG_ACC_ID")
-	}
-	config.HostId = os.Getenv("DF_HOST_ID")
-	if len(*multipleAccountIds) != 0 {
+	if *multipleAccountIds != "" {
 		if *orgAccountId == "" {
-			log.Error().Msg("Error: Organization Account ID is mandatory for organization accounts setup")
+			logrus.Error("Error: Organization Account ID is mandatory for organization accounts setup")
 			return
 		}
 		config.MultipleAccountIds = commaSplitRegex.Split(*multipleAccountIds, -1)
 		config.OrgAccountId = *orgAccountId
 		config.IsOrganizationDeployment = true
 	}
-	config.ComplianceBenchmark = *benchmark
-	if len(config.ComplianceBenchmark) == 0 {
-		config.ComplianceBenchmark = "all"
-	}
 
-	runServices(config, socketPath)
+	if *mode == util.ModeCli {
+		config.ComplianceBenchmark = *benchmark
+		config.FileOutput = *fileOutput
+		runOnce(config)
+	} else if *mode == util.ModeService {
+		config.ComplianceBenchmark = "all"
+		runServices(config)
+	} else {
+		logrus.Error("Error: invalid mode")
+	}
 }
