@@ -63,6 +63,9 @@ type Config struct {
 	OrgAccountId             string                       `json:"org_account_id,omitempty"`
 	IsOrganizationDeployment bool                         `json:"is_organization_deployment,omitempty"`
 	RolePrefix               string                       `json:"role_prefix,omitempty"`
+	RoleName                 string                       `json:"role_name,omitempty"`
+	AwsAccessKeyId           string                       `json:"aws_access_key_id,omitempty"`
+	AwsSecretAccessKey       string                       `json:"aws_secret_access_key,omitempty"`
 	TableToRefresh           []string                     `json:"table_to_refresh,omitempty"`
 	CloudAuditLogsIDs        []string                     `json:"cloud_audit_logs_ids,omitempty"`
 	HttpServerRequired       bool

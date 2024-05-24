@@ -190,8 +190,26 @@ func processAzureCredentials() {
 	}
 }
 
+func useServiceAccountAwsCredentials(c util.Config) bool {
+	return c.AwsAccessKeyId != "" && c.AwsSecretAccessKey != "" && c.RoleName != ""
+}
+
+func createServiceAccountAwsConfig(c util.Config) (error, string) {
+	if c.AwsAccessKeyId == "" || c.AwsSecretAccessKey == "" {
+		return errors.New("aws access key id and aws secret access key cannot be empty"), ""
+	}
+	serviceAccountConfig := fmt.Sprintf("\n[service_account]\naws_access_key_id = %s\naws_secret_access_key = %s\n", c.AwsAccessKeyId, c.AwsSecretAccessKey)
+	return nil, serviceAccountConfig
+}
+
+func createAwsProfileConfig(accountId string, roleName string) string {
+	profileConfig := fmt.Sprintf("\n[profile_%s]\nrole_arn = arn:aws:iam::%s:role/%s\nsource_profile = service_account\n", accountId, accountId, roleName)
+	return profileConfig
+}
+
 func processAwsCredentials(c *ComplianceScanService) {
 	regionString := "regions = [\"*\"]\n"
+	svc := useServiceAccountAwsCredentials(c.config)
 	if len(c.config.MultipleAccountIds) > 0 {
 		os.MkdirAll(HomeDirectory+"/.aws", os.ModePerm)
 		aggr := "connection \"aws_all\" {\n  type = \"aggregator\" \n plugin      = \"aws\" \n  connections = [\"aws_*\"] \n} \n"
@@ -204,14 +222,44 @@ func processAwsCredentials(c *ComplianceScanService) {
 			spcFile.Close()
 			logrus.Fatal(err)
 		}
-		for _, accId := range c.config.MultipleAccountIds {
-			f1, err := os.OpenFile(HomeDirectory+"/.aws/credentials", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+		// Delete the existing credentials file
+		awsCredentialsFile := HomeDirectory + "/.aws/credentials"
+		err = os.Remove(awsCredentialsFile)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		// if service account credentials are provided
+		if svc {
+			_, serviceAccountAwsConfig := createServiceAccountAwsConfig(c.config)
+			f1, err := os.OpenFile(awsCredentialsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				logrus.Fatal(err)
 			}
-			if _, err = f1.Write([]byte("\n[profile_" + accId + "]\nrole_arn = arn:aws:iam::" + accId + ":role/" + c.config.RolePrefix + "-mem-acc-read-only-access\ncredential_source = EcsContainer\n")); err != nil {
+			if _, err = f1.Write([]byte(serviceAccountAwsConfig)); err != nil {
 				f1.Close()
 				logrus.Fatal(err)
+			}
+		}
+
+		for _, accId := range c.config.MultipleAccountIds {
+			f1, err := os.OpenFile(awsCredentialsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				logrus.Fatal(err)
+			}
+
+			if svc {
+				profileConfig := createAwsProfileConfig(accId, c.config.RoleName)
+				if _, err = f1.Write([]byte(profileConfig)); err != nil {
+					f1.Close()
+					logrus.Fatal(err)
+				}
+			} else {
+				if _, err = f1.Write([]byte("\n[profile_" + accId + "]\nrole_arn = arn:aws:iam::" + accId + ":role/" + c.config.RolePrefix + "-mem-acc-read-only-access\ncredential_source = EcsContainer\n")); err != nil {
+					f1.Close()
+					logrus.Fatal(err)
+				}
 			}
 			if err = f1.Close(); err != nil {
 				logrus.Fatal(err)
