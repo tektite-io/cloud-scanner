@@ -225,10 +225,6 @@ func processAwsCredentials(c *ComplianceScanService) {
 
 		// Delete the existing credentials file
 		awsCredentialsFile := HomeDirectory + "/.aws/credentials"
-		err = os.Remove(awsCredentialsFile)
-		if err != nil {
-			logrus.Fatal(err)
-		}
 
 		// if service account credentials are provided
 		if svc {
