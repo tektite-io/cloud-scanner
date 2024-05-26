@@ -123,6 +123,7 @@ func QueryAndUpdateResources(config util.Config, client *deepfence.Client, cloud
 		if accountID != config.CloudMetadata.ID {
 			accountIDPrefix = config.CloudProvider + "_" + accountID + "."
 		}
+		logrus.Debugf("Started querying updated resources for %s: %v", accountID, resourceTypesToRefresh)
 
 		for _, cloudResourceInfo := range cloudProviderToResourceMap[config.CloudProvider] {
 			if !util.InSlice(cloudResourceInfo.Table, resourceTypesToRefresh) {

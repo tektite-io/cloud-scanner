@@ -324,6 +324,7 @@ func (c *ComplianceScanService) queryAndRegisterCloudResources() {
 
 func (c *ComplianceScanService) refreshResourcesFromTrail() {
 	cloudResourceTypesToRefresh, _ := c.CloudResourceChanges.GetResourceTypesToRefresh()
+	logrus.Infof("Refreshing resources from trail: %d", len(cloudResourceTypesToRefresh))
 	if len(cloudResourceTypesToRefresh) == 0 {
 		return
 	}

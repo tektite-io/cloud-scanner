@@ -187,6 +187,7 @@ func (c *Client) RegisterCloudAccount(cloud_provider,
 	}
 
 	scansResponse, err := convertType[client.ModelCloudNodeAccountRegisterResp, util.ScansResponse](*out)
+	logrus.Debugf("ScanResponse: %v", scansResponse.Data)
 	if err != nil {
 		logrus.Debug("convert type failed for scanDetails")
 		return pendingScans, false, nil, nil, err
