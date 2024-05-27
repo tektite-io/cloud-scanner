@@ -1,6 +1,8 @@
 PWD=$(shell pwd)
 IMAGE_REPOSITORY?=quay.io/deepfenceio
+TEKTITE_IMAGE_REPOSITORY?=tektite
 DF_IMG_TAG?=latest
+TEKTITE_OZONE_IMG_TAG?=2.2.0-ozone
 
 .PHONY: bootstrap docker push steampipe-docker steampipe-docker-push
 
@@ -17,7 +19,7 @@ steampipe-docker-push:
 docker:
 	docker pull $(IMAGE_REPOSITORY)/steampipe:0.20.x
 	docker tag $(IMAGE_REPOSITORY)/steampipe:0.20.x $(IMAGE_REPOSITORY)/steampipe:$(DF_IMG_TAG)
-	docker build --build-arg IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) --build-arg DF_IMG_TAG=$(DF_IMG_TAG) -t $(IMAGE_REPOSITORY)/cloud-scanner:$(DF_IMG_TAG) -f Dockerfile $(PWD)
+	docker build --no-cache --build-arg IMAGE_REPOSITORY=$(IMAGE_REPOSITORY) --build-arg DF_IMG_TAG=$(DF_IMG_TAG) -t $(TEKTITE_IMAGE_REPOSITORY)/cloud-scanner:$(TEKTITE_OZONE_IMG_TAG) -f Dockerfile .
 
 push: docker
-	docker push $(IMAGE_REPOSITORY)/cloud-scanner:$(DF_IMG_TAG)
+	docker push $(TEKTITE_IMAGE_REPOSITORY)/cloud-scanner:$(TEKTITE_OZONE_IMG_TAG)
