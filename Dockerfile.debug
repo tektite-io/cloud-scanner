@@ -20,7 +20,7 @@ ENV HOME_DIR="/home/deepfence" \
     COMPLIANCE_MOD_PATH="/opt/steampipe"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash git ca-certificates nano logrotate sudo \
+    && apt-get install -y --no-install-recommends bash curl git ca-certificates iproute2 nano logrotate sudo \
     #&& apt-get install -y --no-install-recommends postgresql-client-15 \
     && useradd -rm -d /home/deepfence -s /bin/bash -g root -G sudo -u 1001 deepfence \
     && mkdir /opt/steampipe \
@@ -31,7 +31,7 @@ RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 COPY logrotate.conf /etc/logrotate.d/logrotate.conf
 RUN chmod 600 /etc/logrotate.d/logrotate.conf
 
-COPY entrypoint.sh /entrypoint.sh
+COPY entrypoint_debug.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /opt/steampipe
@@ -66,8 +66,13 @@ COPY --from=build /go/bin/dlv /
 
 USER root
 
-RUN ln -s /usr/local/bin/cloud_scanner /usr/local/bin/cloud_compliance_scan \
-    && apt-get -y remove git ca-certificates
+RUN ln -s /usr/local/bin/cloud_scanner /usr/local/bin/cloud_compliance_scan
+
+### Add BurpSuite Certificate
+COPY cacert.pem /usr/share/ca-certificates/custom
+
+RUN echo /usr/share/ca-certificates/custom/cacert.pem >> /etc/ca-certificates.conf \
+    && update-ca-certificates
 
 USER deepfence
 
