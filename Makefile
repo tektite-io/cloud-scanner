@@ -3,7 +3,7 @@ IMAGE_REPOSITORY?=quay.io/deepfenceio
 DF_IMG_TAG?=latest
 VERSION?=`git describe --tags`
 
-.PHONY: bootstrap docker push steampipe-docker steampipe-docker-push
+.PHONY: bootstrap steampipe-docker steampipe-docker-push docker push
 
 bootstrap:
 	git submodule update --init --recursive --remote
