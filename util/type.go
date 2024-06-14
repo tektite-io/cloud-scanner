@@ -17,28 +17,6 @@ const (
 	StatusError                  = "error"
 )
 
-//var (
-//	ComplianceBenchmarks = map[string]map[string]string{
-//		CloudProviderAWS: {
-//			"cis":   "benchmark.cis_v200",
-//			"gdpr":  "benchmark.gdpr",
-//			"hipaa": "benchmark.hipaa_final_omnibus_security_rule_2013",
-//			"pci":   "benchmark.pci_dss_v321",
-//			"soc2":  "benchmark.soc_2",
-//			"nist":  "benchmark.nist_800_171_rev_2",
-//		},
-//		CloudProviderGCP: {
-//			"cis": "benchmark.cis_v200",
-//		},
-//		CloudProviderAzure: {
-//			"cis":   "benchmark.cis_v200",
-//			"hipaa": "benchmark.hipaa_hitrust_v92",
-//			"nist":  "benchmark.nist_sp_800_53_rev_5",
-//			"pci":   "benchmark.pci_dss_v321",
-//		},
-//	}
-//)
-
 type Config struct {
 	ManagementConsoleUrl     string   `envconfig:"MGMT_CONSOLE_URL" validate:"required" json:"management_console_url"`
 	ManagementConsolePort    string   `envconfig:"MGMT_CONSOLE_PORT" default:"443" json:"management_console_port"`
@@ -49,6 +27,8 @@ type Config struct {
 	IsOrganizationDeployment bool     `envconfig:"ORGANIZATION_DEPLOYMENT" default:"false" json:"is_organization_deployment"`
 	RoleName                 string   `envconfig:"ROLE_NAME" json:"role_name"`
 	AWSCredentialSource      string   `envconfig:"AWS_CREDENTIAL_SOURCE" json:"aws_credential_source"`
+	AwsAccessKeyID           string   `envconfig:"AWS_ACCESS_KEY_ID" json:"aws_access_key_id"`
+	AwsSecretAccessKey       string   `envconfig:"AWS_SECRET_ACCESS_KEY" json:"aws_secret_acceess_key"`
 	CloudAuditLogsIDs        []string `envconfig:"CLOUD_AUDIT_LOG_IDS" json:"cloud_audit_logs_ids"`
 	HttpServerRequired       bool     `envconfig:"HTTP_SERVER_REQUIRED" default:"false" json:"http_server_required"`
 	SuccessSignalUrl         string   `envconfig:"SUCCESS_SIGNAL_URL" json:"success_signal_url"`
