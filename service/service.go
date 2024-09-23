@@ -25,6 +25,7 @@ import (
 	"github.com/deepfence/cloud-scanner/query_resource"
 	"github.com/deepfence/cloud-scanner/scanner"
 	"github.com/deepfence/cloud-scanner/util"
+	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
 var (
