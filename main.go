@@ -97,9 +97,8 @@ func main() {
 		if config.AWSCredentialSource != "EcsContainer" &&
 			config.AWSCredentialSource != "Ec2InstanceMetadata" &&
 			config.AWSCredentialSource != "Environment" &&
-			config.AWSCredentialSource != "CredentialsAccount" &&
 			config.AWSCredentialSource != "ServiceAccount" {
-			log.Fatal().Msgf("invalid AWS_CREDENTIAL_SOURCE - should be one of EcsContainer, Ec2InstanceMetadata, Environment, ServiceAccount or CredentialsAccount")
+			log.Fatal().Msgf("invalid AWS_CREDENTIAL_SOURCE - should be one of EcsContainer, Ec2InstanceMetadata, Environment, ServiceAccount")
 		}
 		if config.IsOrganizationDeployment && config.RoleName == "" {
 			log.Fatal().Msgf("ROLE_NAME is required in aws installation")
