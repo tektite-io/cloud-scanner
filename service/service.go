@@ -499,6 +499,8 @@ func processAwsCredentials(c *ComplianceScanService) {
 				}
 				if c.config.AWSCredentialSource == "ServiceAccount" {
 					awsCredentialsFile += "source_profile = default\n"
+				} else if c.config.AWSCredentialSource == "CredentialsAccount" {
+					awsCredentialsFile += "source_profile = credentials_account\n"
 				} else {
 					awsCredentialsFile += "credential_source = " + c.config.AWSCredentialSource + "\n"
 				}
