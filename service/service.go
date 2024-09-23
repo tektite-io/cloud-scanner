@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -439,6 +440,23 @@ func processAzureCredentials(c *ComplianceScanService) {
 	}
 }
 
+func useCredentialsAccountAwsCredentials(c util.Config) bool {
+	return c.AWSCredentialSource == "CredentialsAccount" && c.AwsAccessKeyId != "" && c.AwsSecretAccessKey != "" && c.RoleName != ""
+}
+
+func createCredentialsAccountAwsConfig(c util.Config) (error, string) {
+	if c.AwsAccessKeyId == "" || c.AwsSecretAccessKey == "" {
+		return errors.New("aws access key id, aws secret access key cannot be empty"), ""
+	}
+	credentialsAccountConfig := fmt.Sprintf("\n[credentials_account]\naws_access_key_id = %s\naws_secret_access_key = %s\n", c.AwsAccessKeyId, c.AwsSecretAccessKey)
+	return nil, credentialsAccountConfig
+}
+
+func createAwsProfileConfig(accountId string, roleName string) string {
+	profileConfig := fmt.Sprintf("\n[profile_%s]\nrole_arn = arn:aws:iam::%s:role/%s\nsource_profile = credentials_account\n", accountId, accountId, roleName)
+	return profileConfig
+}
+
 func processAwsCredentials(c *ComplianceScanService) {
 	regionString := "regions = [\"*\"]\n"
 
@@ -457,6 +475,13 @@ func processAwsCredentials(c *ComplianceScanService) {
 
 	if c.config.AWSCredentialSource == "ServiceAccount" {
 		awsCredentialsFile += "[default]\nrole_arn = " + os.Getenv("AWS_ROLE_ARN") + "\nweb_identity_token_file = " + os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE") + "\n"
+	} else if useCredentialsAccountAwsCredentials(c.config) {
+		err, awsCredentials := createCredentialsAccountAwsConfig(c.config)
+		if err != nil {
+			log.Fatal().Msgf(err.Error())
+		}
+
+		awsCredentialsFile += awsCredentials
 	}
 
 	steampipeConfigFile = "connection \"aws_all\" {\n  type = \"aggregator\" \n plugin      = \"" + util.SteampipeAWSPluginVersion + "\"\n  connections = [\"aws_*\"] \n} \n"
@@ -467,9 +492,15 @@ func processAwsCredentials(c *ComplianceScanService) {
 			if accId == c.config.DeployedAccountID {
 				steampipeConfigFile += "\nconnection \"aws_" + accId + "\" {\n  plugin = \"" + util.SteampipeAWSPluginVersion + "\"\n  " + regionString + "  max_error_retry_attempts = 10\n  ignore_error_codes = [\"AccessDenied\", \"AccessDeniedException\", \"NotAuthorized\", \"UnauthorizedOperation\", \"AuthorizationError\"]\n}\n"
 			} else {
-				awsCredentialsFile += "\n[profile_" + accId + "]\nrole_arn = arn:aws:iam::" + accId + ":role/" + c.config.RoleName + "\n"
+				if useCredentialsAccountAwsCredentials(c.config) {
+					awsCredentialsFile += createAwsProfileConfig(accId, c.config.RoleName)
+				} else {
+					awsCredentialsFile += "\n[profile_" + accId + "]\nrole_arn = arn:aws:iam::" + accId + ":role/" + c.config.RoleName + "\n"
+				}
 				if c.config.AWSCredentialSource == "ServiceAccount" {
 					awsCredentialsFile += "source_profile = default\n"
+				} else if c.config.AWSCredentialSource == "CredentialsAccount" {
+					awsCredentialsFile += "source_profile = credentials_account\n"
 				} else {
 					awsCredentialsFile += "credential_source = " + c.config.AWSCredentialSource + "\n"
 				}
