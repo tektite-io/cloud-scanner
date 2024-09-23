@@ -25,7 +25,6 @@ import (
 	"github.com/deepfence/cloud-scanner/query_resource"
 	"github.com/deepfence/cloud-scanner/scanner"
 	"github.com/deepfence/cloud-scanner/util"
-	"google.golang.org/api/cloudresourcemanager/v1"
 )
 
 var (
@@ -453,7 +452,7 @@ func createCredentialsAccountAwsConfig(c util.Config) (error, string) {
 }
 
 func createAwsProfileConfig(accountId string, roleName string) string {
-	profileConfig := fmt.Sprintf("\n[profile_%s]\nrole_arn = arn:aws:iam::%s:role/%s\nsource_profile = credentials_account\n", accountId, accountId, roleName)
+	profileConfig := fmt.Sprintf("\n[profile_%s]\nrole_arn = arn:aws:iam::%s:role/%s\n", accountId, accountId, roleName)
 	return profileConfig
 }
 
@@ -499,8 +498,6 @@ func processAwsCredentials(c *ComplianceScanService) {
 				}
 				if c.config.AWSCredentialSource == "ServiceAccount" {
 					awsCredentialsFile += "source_profile = default\n"
-				} else if c.config.AWSCredentialSource == "CredentialsAccount" {
-					awsCredentialsFile += "source_profile = credentials_account\n"
 				} else {
 					awsCredentialsFile += "credential_source = " + c.config.AWSCredentialSource + "\n"
 				}
