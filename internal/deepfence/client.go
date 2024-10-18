@@ -67,6 +67,9 @@ func (c *Client) GetCloudAccountsRefreshStatus() (map[string]util.RefreshMetadat
 		},
 	}
 	req = req.SearchSearchNodeReq(searchRequest)
+
+	log.Debug().Msgf("Search Node Request: %v", req)
+
 	log.Debug().Msgf("Fetch cloud accounts")
 
 	accountsRefreshStatus := make(map[string]util.RefreshMetadata)
@@ -75,6 +78,9 @@ func (c *Client) GetCloudAccountsRefreshStatus() (map[string]util.RefreshMetadat
 		log.Error().Msgf("Request errored on fetching cloud accounts: %s", err.Error())
 		return accountsRefreshStatus, err
 	}
+
+	log.Debug().Msgf("Fetched cloud accounts: %v", cloudAccounts)
+
 	for _, cloudAccount := range cloudAccounts {
 		refreshMetadataStr := cloudAccount.GetRefreshMetadata()
 		var refreshMetadata util.RefreshMetadata
@@ -87,6 +93,7 @@ func (c *Client) GetCloudAccountsRefreshStatus() (map[string]util.RefreshMetadat
 		accountsRefreshStatus[cloudAccount.GetNodeName()] = refreshMetadata
 	}
 	log.Info().Msgf("Fetched cloud accounts")
+	log.Debug().Msgf("accountsRefreshStatus: %v", accountsRefreshStatus)
 	return accountsRefreshStatus, nil
 }
 
