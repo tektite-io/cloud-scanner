@@ -55,6 +55,9 @@ func (c *Client) GetCloudAccountsRefreshStatus() (map[string]util.RefreshMetadat
 	} else {
 		searchFilter["node_name"] = []interface{}{c.config.AccountID}
 	}
+
+	log.Debug().Msgf("(GetCloudAccountsRefreshStatus) Search Filter: %+v", searchFilter)
+
 	searchRequest := client.SearchSearchNodeReq{
 		NodeFilter: client.SearchSearchFilter{
 			Filters: client.ReportersFieldsFilters{
@@ -68,8 +71,6 @@ func (c *Client) GetCloudAccountsRefreshStatus() (map[string]util.RefreshMetadat
 	}
 	req = req.SearchSearchNodeReq(searchRequest)
 
-	log.Debug().Msgf("Search Node Request: %v", req)
-
 	log.Debug().Msgf("Fetch cloud accounts")
 
 	accountsRefreshStatus := make(map[string]util.RefreshMetadata)
@@ -79,7 +80,7 @@ func (c *Client) GetCloudAccountsRefreshStatus() (map[string]util.RefreshMetadat
 		return accountsRefreshStatus, err
 	}
 
-	log.Debug().Msgf("Fetched cloud accounts: %v", cloudAccounts)
+	log.Debug().Msgf("(GetCloudAccountsRefreshStatus) Fetched cloud accounts: %+v", cloudAccounts)
 
 	for _, cloudAccount := range cloudAccounts {
 		refreshMetadataStr := cloudAccount.GetRefreshMetadata()
@@ -93,7 +94,7 @@ func (c *Client) GetCloudAccountsRefreshStatus() (map[string]util.RefreshMetadat
 		accountsRefreshStatus[cloudAccount.GetNodeName()] = refreshMetadata
 	}
 	log.Info().Msgf("Fetched cloud accounts")
-	log.Debug().Msgf("accountsRefreshStatus: %v", accountsRefreshStatus)
+	log.Debug().Msgf("(GetCloudAccountsRefreshStatus) accountsRefreshStatus: %+v", accountsRefreshStatus)
 	return accountsRefreshStatus, nil
 }
 

@@ -82,7 +82,7 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 		}
 	}
 
-	log.Debug().Msgf("Started querying resources for %v", accountsToRefresh)
+	log.Debug().Msgf("(QueryAndRegisterResources) Started querying resources for %+v", accountsToRefresh)
 
 	cloudResourcesFile, err := os.OpenFile(CloudResourcesFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
@@ -92,7 +92,7 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 
 	var refreshStatus map[string]util.RefreshMetadata
 	if r.config.DatabasePersistenceSupported {
-		log.Debug().Msgf("Database persistence is enabled. Getting refresh status from database")
+		log.Debug().Msgf("(QueryAndRegisterResources) Database persistence is enabled. Getting refresh status from database")
 		refreshStatus, err = r.dfClient.GetCloudAccountsRefreshStatus()
 		if err != nil {
 			return []error{err}
@@ -101,10 +101,10 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 
 	for _, account := range accountsToRefresh {
 		if refreshMetadata, ok := refreshStatus[account.AccountID]; ok && refreshMetadata.InProgressResourceType != "" {
-			log.Debug().Msgf("Resource refresh for %s is in progress with refreshMetadata: %v", account.AccountID, refreshMetadata)
+			log.Debug().Msgf("(QueryAndRegisterResources) Resource refresh for %s is in progress with refreshMetadata: %+v", account.AccountID, refreshMetadata)
 			r.SetResourceRefreshStatus(account, utils.ScanStatusStarting, refreshMetadata)
 		} else {
-			log.Debug().Msgf("Resource refresh for %s is not in progress, full refresh", account.AccountID)
+			log.Debug().Msgf("(QueryAndRegisterResources) Resource refresh for %s is not in progress, full refresh", account.AccountID)
 			r.SetResourceRefreshStatus(account, utils.ScanStatusStarting, util.RefreshMetadata{})
 		}
 	}
@@ -112,17 +112,17 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 	count := 0
 	var errs = make([]error, 0)
 	for _, account := range accountsToRefresh {
-		log.Debug().Msgf("Started querying resources for %v", account)
+		log.Debug().Msgf("(QueryAndRegisterResources)Started querying resources for %+v", account)
 
 		skipThisResourceType := false
 		var inProgressResourceType string
 		if len(account.ResourceTypes) > 0 {
 			// Partial refresh from cloudtrail
-			log.Debug().Msgf("Partial refresh for %s", account.AccountID)
+			log.Debug().Msgf("(QueryAndRegisterResources) Partial refresh for %s", account.AccountID)
 			r.SetResourceRefreshStatus(account, utils.ScanStatusInProgress, util.RefreshMetadata{})
 		} else {
 			if refreshMetadata, ok := refreshStatus[account.AccountID]; ok && refreshMetadata.InProgressResourceType != "" {
-				log.Debug().Msgf("Resource refresh for %s is in progress with refreshMetadata: %v", account.AccountID, refreshMetadata)
+				log.Debug().Msgf("(QueryAndRegisterResources) Resource refresh for %s is in progress with refreshMetadata: %v", account.AccountID, refreshMetadata)
 				inProgressResourceType = refreshMetadata.InProgressResourceType
 				skipThisResourceType = true
 			}
@@ -153,6 +153,9 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 					CompletedResourceTypes: i,
 					TotalResourceTypes:     totalResourceTypes,
 				})
+
+				log.Debug().Msgf("(QueryAndRegisterResources) SetResourceRefreshStatus for account %s, resource type %s, completed %d, total %d", account.AccountID, cloudResourceInfo.Table, i, totalResourceTypes)
+
 			}
 
 			ingestedCount, err := r.queryResources(account.AccountID, cloudResourceInfo, cloudResourcesFile)
@@ -160,11 +163,11 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 				errs = append(errs, err)
 			}
 
-			log.Debug().Msgf("Cloud resources ingested in account %s, resource type %s: %d", account.AccountID, cloudResourceInfo.Table, ingestedCount)
+			log.Debug().Msgf("(QueryAndRegisterResources) Cloud resources ingested in account %s, resource type %s: %d", account.AccountID, cloudResourceInfo.Table, ingestedCount)
 			count += ingestedCount
 		}
 
-		log.Debug().Msgf("Querying resources complete for %v", account)
+		log.Debug().Msgf("(QueryAndRegisterResources) Querying resources complete for %v", account)
 		r.SetResourceRefreshStatus(account, utils.ScanStatusSuccess, util.RefreshMetadata{})
 	}
 	log.Info().Msgf("Cloud resources ingested: %d", count)
