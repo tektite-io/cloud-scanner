@@ -92,6 +92,7 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 
 	var refreshStatus map[string]util.RefreshMetadata
 	if r.config.DatabasePersistenceSupported {
+		log.Debug().Msgf("Database persistence is enabled. Getting refresh status from database")
 		refreshStatus, err = r.dfClient.GetCloudAccountsRefreshStatus()
 		if err != nil {
 			return []error{err}
@@ -100,8 +101,10 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 
 	for _, account := range accountsToRefresh {
 		if refreshMetadata, ok := refreshStatus[account.AccountID]; ok && refreshMetadata.InProgressResourceType != "" {
+			log.Debug().Msgf("Resource refresh for %s is in progress with refreshMetadata: %v", account.AccountID, refreshMetadata)
 			r.SetResourceRefreshStatus(account, utils.ScanStatusStarting, refreshMetadata)
 		} else {
+			log.Debug().Msgf("Resource refresh for %s is not in progress, full refresh", account.AccountID)
 			r.SetResourceRefreshStatus(account, utils.ScanStatusStarting, util.RefreshMetadata{})
 		}
 	}
@@ -115,9 +118,11 @@ func (r *ResourceRefreshService) QueryAndRegisterResources(accountsToRefresh []u
 		var inProgressResourceType string
 		if len(account.ResourceTypes) > 0 {
 			// Partial refresh from cloudtrail
+			log.Debug().Msgf("Partial refresh for %s", account.AccountID)
 			r.SetResourceRefreshStatus(account, utils.ScanStatusInProgress, util.RefreshMetadata{})
 		} else {
 			if refreshMetadata, ok := refreshStatus[account.AccountID]; ok && refreshMetadata.InProgressResourceType != "" {
+				log.Debug().Msgf("Resource refresh for %s is in progress with refreshMetadata: %v", account.AccountID, refreshMetadata)
 				inProgressResourceType = refreshMetadata.InProgressResourceType
 				skipThisResourceType = true
 			}
