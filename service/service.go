@@ -494,9 +494,11 @@ func processAwsCredentials(c *ComplianceScanService) {
 
 	allAccountIDs := []string{}
 	if c.config.IsOrganizationDeployment {
+		log.Debug().Msgf("Fetching organization account IDs")
 		allAccountIDs = c.GetOrganizationAccountIDs()
 		if !util.InSlice(c.config.AccountID, allAccountIDs) {
 			allAccountIDs = append(allAccountIDs, c.config.AccountID)
+			log.Debug().Msgf("Accounts IDs: %+v", allAccountIDs)
 		}
 	} else {
 		allAccountIDs = []string{c.config.AccountID}
@@ -528,12 +530,14 @@ func processAwsCredentials(c *ComplianceScanService) {
 		}
 	}
 
+	log.Debug().Msgf("Steampipe Config File: %s", steampipeConfigFile)
 	err := saveFileOverwrite(util.SteampipeInstallDirectory+"/config/aws.spc", steampipeConfigFile)
 	if err != nil {
 		log.Fatal().Msgf(err.Error())
 	}
 
 	if len(awsCredentialsFile) > 0 {
+		log.Debug().Msgf("AWS Credentials File: %s", awsCredentialsFile)
 		os.MkdirAll(util.HomeDirectory+"/.aws", os.ModePerm)
 		err = saveFileOverwrite(util.HomeDirectory+"/.aws/credentials", awsCredentialsFile)
 		if err != nil {
