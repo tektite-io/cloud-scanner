@@ -2,6 +2,7 @@ package cloud_resource_changes_aws
 
 import (
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -16,8 +17,56 @@ func GetSupportedAwsRegions() []string {
 		"us-east-2", "us-gov-east-1", "us-gov-west-1", "us-west-1", "us-west-2"}
 }
 
+//type SteampipeQueryResponse struct {
+//	Rows []CloudTrailTrail `json:"rows"`
+//}
+
 type SteampipeQueryResponse struct {
-	Rows []CloudTrailTrail `json:"rows"`
+	Rows []json.RawMessage `json:"rows"`
+}
+
+//func ConvertRowsToType(rows []json.RawMessage, targetType reflect.Type) (interface{}, error) {
+//	// Create a slice of the target type
+//	sliceType := reflect.SliceOf(targetType)
+//	sliceValue := reflect.MakeSlice(sliceType, 0, len(rows))
+//
+//	// Iterate over each row and unmarshal it into the target type
+//	for _, rawRow := range rows {
+//		// Create a new instance of the target type
+//		elem := reflect.New(targetType).Elem()
+//
+//		// Unmarshal the raw row into the target struct
+//		if err := json.Unmarshal(rawRow, elem.Addr().Interface()); err != nil {
+//			return nil, fmt.Errorf("failed to unmarshal row: %w", err)
+//		}
+//
+//		// Append the unmarshaled element to the slice
+//		sliceValue = reflect.Append(sliceValue, elem)
+//	}
+//
+//	// Return the populated slice as an interface{}
+//	return sliceValue.Interface(), nil
+//}
+
+func ConvertRows[T any](rows []json.RawMessage) ([]T, error) {
+	// Create an empty slice of the target type T
+	var result []T
+
+	// Iterate over each row
+	for _, rawRow := range rows {
+		// Create an instance of the target type T
+		var elem T
+
+		// Unmarshal the raw row into the target struct
+		if err := json.Unmarshal(rawRow, &elem); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal row: %w", err)
+		}
+
+		// Append the unmarshaled element to the result slice
+		result = append(result, elem)
+	}
+
+	return result, nil
 }
 
 func getCloudTrailTrails(config util.Config) []CloudTrailTrail {
@@ -31,6 +80,9 @@ func getCloudTrailTrails(config util.Config) []CloudTrailTrail {
 	} else {
 		query = "steampipe query --output json \"select * from aws_all.aws_cloudtrail_trail where is_multi_region_trail = true " + isOrganizationTrail + " and arn in ('" + strings.Join(config.CloudAuditLogsIDs, "', '") + "')\""
 	}
+
+	log.Debug().Msgf("(getCloudTrailTrails) Query: %s", query)
+
 	cmd := exec.Command("bash", "-c", query)
 	stdOut, stdErr := cmd.CombinedOutput()
 	var trailList []CloudTrailTrail
@@ -39,14 +91,25 @@ func getCloudTrailTrails(config util.Config) []CloudTrailTrail {
 		log.Error().Msgf(string(stdOut))
 		return trailList
 	}
+
 	var steampipeQueryResponse SteampipeQueryResponse
 	if err := json.Unmarshal(stdOut, &steampipeQueryResponse); err != nil {
-		log.Error().Msgf("Error unmarshaling cloudtrail details: %v \n Steampipe Output: %s",
+		log.Error().Msgf("Error unmarshaling steampipe query details: %v \n Steampipe Output: %s",
 			err, string(stdOut))
 		return trailList
 	}
 
-	trailList = steampipeQueryResponse.Rows
+	// Convert rows to CloudTrialTrail dynamically
+	trailList, err := ConvertRows[CloudTrailTrail](steampipeQueryResponse.Rows)
+
+	log.Debug().Msgf("(getCloudTrailTrails) trailList: %v", trailList)
+
+	if err != nil {
+		log.Error().Msgf("Error converting steampipe query details to CloudTrialTrail: %v \n Steampipe Output: %s",
+			err, string(stdOut))
+		return trailList
+	}
+
 	selectedARNs := make(map[string]bool)
 	var selectedTrailList []CloudTrailTrail
 

@@ -80,8 +80,6 @@ func (c *Client) GetCloudAccountsRefreshStatus() (map[string]util.RefreshMetadat
 		return accountsRefreshStatus, err
 	}
 
-	log.Debug().Msgf("(GetCloudAccountsRefreshStatus) Fetched cloud accounts: %+v", cloudAccounts)
-
 	for _, cloudAccount := range cloudAccounts {
 		refreshMetadataStr := cloudAccount.GetRefreshMetadata()
 		var refreshMetadata util.RefreshMetadata

@@ -98,11 +98,29 @@ func (c *CloudResourceChangesAWS) getS3Region(s3BucketName, accountID string) st
 		log.Error().Msgf("Error while obtaining s3 bucket region for cloudtrail: %v", stdErr)
 		log.Error().Msgf(string(stdOut))
 	}
-	var s3BucketObjMapList []S3Details
-	if err := json.Unmarshal(stdOut, &s3BucketObjMapList); err != nil {
-		log.Error().Msgf("Error unmarshaling s3 bucket region: %v \n Steampipe Output: %s",
+
+	var steampipeQueryResponse SteampipeQueryResponse
+	if err := json.Unmarshal(stdOut, &steampipeQueryResponse); err != nil {
+		log.Error().Msgf("Error unmarshaling steampipe query details: %v \n Steampipe Output: %s",
 			err, string(stdOut))
+		return s3Region
 	}
+
+	var s3BucketObjMapList, err = ConvertRows[S3Details](steampipeQueryResponse.Rows)
+	if err != nil {
+		log.Error().Msgf("Error converting steampipe query details to S3Details: %v \n Steampipe Output: %s",
+			err, string(stdOut))
+		return s3Region
+	}
+
+	//var s3BucketObjMapList []S3Details
+	//if err := json.Unmarshal(stdOut, &s3BucketObjMapList); err != nil {
+	//	log.Error().Msgf("Error unmarshaling s3 bucket region: %v \n Steampipe Output: %s",
+	//		err, string(stdOut))
+	//}
+
+	log.Debug().Msgf("(getS3Region) s3BucketObjMapList: %+v", s3BucketObjMapList)
+
 	if len(s3BucketObjMapList) == 0 {
 		log.Error().Msgf("Unable to get s3 bucket region, defaulting to us-east-1")
 	} else {
@@ -121,11 +139,34 @@ func getOrgId(accountId string) string {
 		log.Error().Msgf(string(stdOut))
 		return orgId
 	}
-	var orgIdObjMapList []AccountDetails
-	if err := json.Unmarshal(stdOut, &orgIdObjMapList); err != nil {
-		log.Error().Msgf("Error unmarshaling org id: %v \n Steampipe Output: %s", err, string(stdOut))
+
+	var steampipeQueryResponse SteampipeQueryResponse
+	if err := json.Unmarshal(stdOut, &steampipeQueryResponse); err != nil {
+		log.Error().Msgf("Error unmarshaling steampipe query details: %v \n Steampipe Output: %s",
+			err, string(stdOut))
 		return orgId
 	}
+
+	//trailList, err := ConvertRows[CloudTrailTrail](steampipeQueryResponse.Rows)
+	//if err != nil {
+	//	log.Error().Msgf("Error converting steampipe query details to CloudTrialTrail: %v \n Steampipe Output: %s",
+	//		err, string(stdOut))
+	//	return trailList
+
+	var orgIdObjMapList, err = ConvertRows[AccountDetails](steampipeQueryResponse.Rows)
+	if err != nil {
+		log.Error().Msgf("Error converting steampipe query details to AccountDetails: %v \n Steampipe Output: %s",
+			err, string(stdOut))
+		return orgId
+	}
+
+	//if err = json.Unmarshal(stdOut, &orgIdObjMapList); err != nil {
+	//	log.Error().Msgf("Error unmarshaling org id: %v \n Steampipe Output: %s", err, string(stdOut))
+	//	return orgId
+	//}
+
+	log.Debug().Msgf("(getOrgId) orgIdObjMapList: %+v", orgIdObjMapList)
+
 	if len(orgIdObjMapList) > 0 {
 		orgId = orgIdObjMapList[0].OrgId
 	}
